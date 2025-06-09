@@ -1,6 +1,6 @@
-# BitcoinZ Wallet CLI
+# BitcoinZ Light CLI
 
-A command-line BitcoinZ wallet that connects to a lightwalletd server for fast synchronization.
+A lightweight command-line BitcoinZ wallet that uses the lightwalletd protocol for fast synchronization.
 
 ## Features
 

@@ -105,7 +105,7 @@ pub fn startup(
 
     // Print startup Messages
     info!(""); // Blank line
-    info!("Starting BitcoinZ Wallet CLI");
+    info!("Starting BitcoinZ Light CLI");
     info!("Light Client config {:?}", config);
 
     if print_updates {

@@ -10,7 +10,7 @@ use bitcoinzwalletlib::{
 pub fn main() {
     // Get command line arguments
     use clap::{App, Arg};
-    let fresh_app = App::new("BitcoinZ Wallet CLI");
+    let fresh_app = App::new("BitcoinZ Light CLI");
     let configured_app = configure_clapapp!(fresh_app);
     let matches = configured_app.get_matches();
 

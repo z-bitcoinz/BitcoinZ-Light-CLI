@@ -1,5 +1,5 @@
 [package]
-name = "bitcoinz-wallet-cli"
+name = "bitcoinz-light-cli"
 version = "1.0.0"
 edition = "2018"
 
