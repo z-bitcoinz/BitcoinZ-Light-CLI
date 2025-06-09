@@ -1,0 +1,87 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: bitcoinz-wallet-cli-linux-amd64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: bitcoinz-wallet-cli-windows-amd64.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: bitcoinz-wallet-cli-macos-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: bitcoinz-wallet-cli-macos-arm64
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.target }}
+        override: true
+    
+    - name: Build
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --target ${{ matrix.target }}
+    
+    - name: Rename binary
+      run: |
+        if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+          mv target/${{ matrix.target }}/release/bitcoinz-wallet-cli.exe ${{ matrix.artifact }}
+        else
+          mv target/${{ matrix.target }}/release/bitcoinz-wallet-cli ${{ matrix.artifact }}
+        fi
+      shell: bash
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.artifact }}
+        path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          bitcoinz-wallet-cli-linux-amd64/bitcoinz-wallet-cli-linux-amd64
+          bitcoinz-wallet-cli-windows-amd64.exe/bitcoinz-wallet-cli-windows-amd64.exe
+          bitcoinz-wallet-cli-macos-amd64/bitcoinz-wallet-cli-macos-amd64
+          bitcoinz-wallet-cli-macos-arm64/bitcoinz-wallet-cli-macos-arm64
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,33 @@
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.deb
+*.dmg
+*.msi
+*.exe
+*.app
+*.zip
+*.tar.gz
+
+# Logs
+*.log
+
+# Test data
+test-data/
+
+# Local config
+.env
