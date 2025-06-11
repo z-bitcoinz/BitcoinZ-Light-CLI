@@ -1,13 +1,9 @@
 use zcash_primitives::{
-    consensus::{self, BlockHeight, Parameters},
+    consensus::BlockHeight,
     transaction::{
-        self,
-        components::{Amount, TxOut, transparent},
-        Transaction, TxVersion,
         builder::Builder,
     },
 };
-use zcash_primitives::sapling::prover::TxProver;
 use orchard::Anchor;
 use crate::BitcoinZMainNetwork;
 

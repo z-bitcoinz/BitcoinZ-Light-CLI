@@ -4,20 +4,12 @@
 /// the binding signature issue that prevents transactions from being accepted.
 
 use zcash_primitives::{
-    consensus::{BlockHeight, Parameters},
-    legacy::Script,
-    memo::MemoBytes,
+    consensus::BlockHeight,
     transaction::{
-        self,
-        builder::Builder,
-        components::{Amount, TxOut, transparent},
+        components::{TxOut, transparent},
         Transaction, TxVersion,
     },
 };
-use zcash_primitives::sapling::prover::TxProver;
-use orchard::Anchor;
-use crate::{BitcoinZMainNetwork, BITCOINZ_MAINNET};
-use rand::{rngs::OsRng, CryptoRng, RngCore};
 
 /// Transaction type detection
 #[derive(Debug, Clone, Copy, PartialEq)]

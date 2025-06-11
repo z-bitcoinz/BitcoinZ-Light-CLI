@@ -4,17 +4,12 @@
 /// to bypass the Sapling binding signature issue.
 
 use zcash_primitives::{
-    consensus::{BlockHeight, BranchId},
-    legacy::{Script, TransparentAddress},
+    consensus::BlockHeight,
+    legacy::TransparentAddress,
     transaction::{
-        self,
-        components::{Amount, OutPoint, TxOut, transparent},
-        sighash::{self, SignableInput, signature_hash},
-        Transaction, TxVersion,
+        components::{Amount, OutPoint, TxOut},
     },
 };
-use byteorder::{LittleEndian, WriteBytesExt};
-use std::io::Write;
 
 /// Overwinter version and version group ID for BitcoinZ
 const OVERWINTER_VERSION: u32 = 0x80000003;  // v3

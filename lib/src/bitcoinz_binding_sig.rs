@@ -4,9 +4,8 @@
 
 use zcash_primitives::{
     consensus::{BlockHeight, BranchId},
-    transaction::{Transaction, TxVersion, sighash::{SignableInput, signature_hash}},
+    transaction::{Transaction, TxVersion},
 };
-use zcash_primitives::sapling::redjubjub;
 
 /// Analyze why the binding signature fails for BitcoinZ
 pub fn analyze_binding_signature(tx: &Transaction, height: BlockHeight) -> String {

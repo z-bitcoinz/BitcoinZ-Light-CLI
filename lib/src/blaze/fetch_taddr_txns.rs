@@ -14,6 +14,8 @@ use zcash_primitives::consensus;
 use zcash_primitives::consensus::BlockHeight;
 
 use zcash_primitives::consensus::BranchId;
+use std::any::TypeId;
+use crate::{BitcoinZMainNetwork, BITCOINZ_MAINNET};
 use zcash_primitives::transaction::Transaction;
 
 pub struct FetchTaddrTxns<P> {

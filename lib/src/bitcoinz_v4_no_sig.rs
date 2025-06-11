@@ -5,11 +5,10 @@
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
-use sha2::{Digest, Sha256};
 use blake2b_simd::{Params};
 use std::io::Write;
 use zcash_primitives::{
-    consensus::{BlockHeight, BranchId, Parameters},
+    consensus::{BlockHeight, Parameters},
     legacy::{Script, TransparentAddress},
     transaction::{
         components::{Amount, OutPoint, TxOut},

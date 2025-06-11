@@ -3,10 +3,9 @@
 /// This module builds Overwinter (v3) transactions for transparent-only transfers
 /// to bypass the Sapling binding signature issue.
 
-use blake2b_simd::{Params, State};
+use blake2b_simd::Params;
 use byteorder::{LittleEndian, WriteBytesExt};
 use secp256k1::{Message, PublicKey, Secp256k1, SecretKey};
-use sha2::{Digest, Sha256};
 use std::io::Write;
 use zcash_primitives::{
     consensus::{BlockHeight, BranchId, Parameters},
