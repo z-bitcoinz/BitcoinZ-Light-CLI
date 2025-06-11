@@ -9,6 +9,7 @@ use crate::{
     grpc_connector::GrpcConnector,
     lightclient::lightclient_config::MAX_REORG,
     lightwallet::{self, data::WalletTx, message::Message, now, LightWallet, MAX_CHECKPOINTS, MERKLE_DEPTH},
+    BitcoinZMainNetwork, BITCOINZ_MAINNET,
 };
 use futures::{stream::FuturesUnordered, StreamExt};
 use incrementalmerkletree::bridgetree::BridgeTree;
@@ -16,6 +17,7 @@ use json::{array, object, JsonValue};
 use log::{error, info, warn};
 use orchard::tree::MerkleHashOrchard;
 use std::{
+    any::TypeId,
     cmp,
     collections::HashSet,
     fs::File,

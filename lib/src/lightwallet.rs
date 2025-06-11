@@ -46,20 +46,21 @@ use zcash_address::unified::Receiver;
 use zcash_address::unified::{Address as UnifiedAddress, Encoding};
 use zcash_client_backend::{
     address,
-    encoding::{decode_extended_full_viewing_key, decode_extended_spending_key, encode_payment_address},
+    encoding::{decode_extended_full_viewing_key, decode_extended_spending_key, encode_payment_address, AddressCodec},
 };
 
-use zcash_primitives::consensus;
+use zcash_primitives::consensus::{self, BranchId};
 use zcash_primitives::memo::MemoBytes;
 use zcash_primitives::merkle_tree::incremental::{read_bridge, read_leu64_usize, write_bridge, write_usize_leu64};
 use zcash_primitives::merkle_tree::HashSer;
 use zcash_primitives::sapling::prover::TxProver;
 use zcash_primitives::{
-    legacy::Script,
+    legacy::{Script, TransparentAddress},
     memo::Memo,
     transaction::{
         builder::Builder,
         components::{amount::DEFAULT_FEE, OutPoint, TxOut},
+        Transaction,
     },
     zip32::ExtendedFullViewingKey,
 };
@@ -71,6 +72,13 @@ use self::{
     message::Message,
     wallet_txns::WalletTxns,
 };
+use crate::bitcoinz_transaction::{detect_tx_type, BitcoinZTxType};
+use crate::bitcoinz_binding_sig_fix::{needs_bitcoinz_binding_sig_fix, compute_bitcoinz_binding_message, verify_bitcoinz_binding_signature};
+use crate::bitcoinz_branch::bitcoinz_branch_id_for_height;
+use crate::bitcoinz_overwinter_builder::{build_overwinter_tx, should_use_overwinter};
+use crate::bitcoinz_legacy_builder::build_legacy_tx;
+use crate::bitcoinz_js_bridge::build_bitcoinz_js_tx;
+use crate::bitcoinz_v4_no_sig::build_bitcoinz_v4_no_sig;
 
 pub(crate) mod data;
 mod extended_key;
@@ -1425,9 +1433,13 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
                 .unwrap(),
         );
 
-        let mut builder = Builder::new_with_orchard(self.config.get_params().clone(), target_height, orchard_anchor);
-        builder.with_progress_notifier(progress_notifier);
-
+        
+        // For BitcoinZ, we need special handling for transparent-only transactions
+        // Check if all recipients are transparent addresses
+        let all_transparent_recipients = recepients.iter().all(|(addr, _, _)| {
+            matches!(addr, address::RecipientAddress::Transparent(_))
+        });
+        
         // Create a map from address -> sk for all taddrs, so we can spend from the
         // right address
         let address_to_sk = self.keys.read().await.get_taddr_to_sk_map();
@@ -1455,6 +1467,121 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
             s_notes.len(),
             utxos.len()
         );
+        
+        // Detect BitcoinZ transaction type
+        let tx_type = detect_tx_type(
+            utxos.len(),  // transparent inputs
+            s_notes.len() + o_notes.len(),  // shielded inputs
+            recepients.iter().filter(|(addr, _, _)| matches!(addr, address::RecipientAddress::Transparent(_))).count(),  // transparent outputs
+            recepients.iter().filter(|(addr, _, _)| !matches!(addr, address::RecipientAddress::Transparent(_))).count()   // shielded outputs
+        );
+        
+        
+        let is_transparent_only = tx_type == BitcoinZTxType::TransparentToTransparent;
+        
+        // BitcoinZ Fix: For transparent-only transactions, use JavaScript bridge
+        if is_transparent_only && should_use_overwinter(
+            utxos.len(),
+            s_notes.len() + o_notes.len(), 
+            recepients.iter().filter(|(addr, _, _)| matches!(addr, address::RecipientAddress::Transparent(_))).count(),
+            recepients.iter().filter(|(addr, _, _)| !matches!(addr, address::RecipientAddress::Transparent(_))).count()
+        ) {
+            
+            // Prepare inputs and outputs for legacy builder
+            let mut legacy_inputs = Vec::new();
+            for utxo in &utxos {
+                let outpoint = utxo.to_outpoint();
+                let coin = TxOut {
+                    value: Amount::from_u64(utxo.value).unwrap(),
+                    script_pubkey: Script { 0: utxo.script.clone() },
+                };
+                
+                match address_to_sk.get(&utxo.address) {
+                    Some(sk) => {
+                        legacy_inputs.push((outpoint, coin, *sk));
+                    }
+                    None => {
+                        return Err(format!("Couldn't find the secret key for taddr {}", utxo.address));
+                    }
+                }
+            }
+            
+            let mut legacy_outputs = Vec::new();
+            for (addr, value, _) in &recepients {
+                if let address::RecipientAddress::Transparent(taddr) = addr {
+                    legacy_outputs.push((taddr.clone(), *value));
+                } else {
+                    return Err("Legacy builder only supports transparent outputs".to_string());
+                }
+            }
+            
+            // Add change output if needed
+            let total_in = utxos.iter().map(|u| u.value).sum::<u64>();
+            let total_out = recepients.iter().map(|(_, v, _)| u64::from(*v)).sum::<u64>();
+            let fee = u64::from(DEFAULT_FEE);
+            
+            if total_in > total_out + fee {
+                // Send change to first transparent address
+                let change_amount = total_in - total_out - fee;
+                if let Ok(change_addr) = TransparentAddress::decode(&self.config.get_params(), &self.keys.read().await.tkeys[0].address) {
+                    legacy_outputs.push((change_addr, Amount::from_u64(change_amount).unwrap()));
+                } else {
+                    return Err("Failed to decode change address".to_string());
+                }
+            }
+            
+            // Build the transaction using v4 no-binding-sig builder
+            match build_bitcoinz_v4_no_sig(&self.config.get_params(), legacy_inputs, legacy_outputs, target_height) {
+                Ok(raw_tx) => {
+                    
+                    // Compute txid manually for our custom Overwinter transaction
+                    use sha2::{Sha256, Digest as Sha2Digest};
+                    let mut hasher = Sha256::new();
+                    hasher.update(&raw_tx);
+                    let hash1 = hasher.finalize();
+                    let mut hasher2 = Sha256::new();
+                    hasher2.update(&hash1);
+                    let hash2 = hasher2.finalize();
+                    let mut txid_bytes = [0u8; 32];
+                    txid_bytes.copy_from_slice(&hash2);
+                    txid_bytes.reverse(); // Convert to big-endian for display
+                    let txid = hex::encode(&txid_bytes);
+                    
+                    // Broadcast the transaction
+                    let broadcast_result = broadcast_fn(raw_tx.clone().into_boxed_slice()).await?;
+                    
+                    // Mark UTXOs as spent
+                    {
+                        let mut txs = self.txns.write().await;
+                        for utxo in utxos {
+                            let spent_utxo = txs
+                                .current
+                                .get_mut(&utxo.txid)
+                                .unwrap()
+                                .utxos
+                                .iter_mut()
+                                .find(|u| utxo.txid == u.txid && utxo.output_index == u.output_index)
+                                .unwrap();
+                            use zcash_primitives::transaction::TxId;
+                            spent_utxo.unconfirmed_spent = Some((TxId::from_bytes(txid_bytes), u32::from(target_height)));
+                        }
+                    }
+                    
+                    // For Overwinter transactions, we skip the mempool update since we don't have a parsed Transaction object
+                    
+                    self.send_progress.write().await.is_send_in_progress = false;
+                    return Ok((broadcast_result, raw_tx));
+                }
+                Err(e) => {
+                    // Continue with standard builder below
+                }
+            }
+        }
+        
+        // Standard builder for non-transparent or if Overwinter builder failed
+        let builder_height = target_height;
+        let mut builder = Builder::new_with_orchard(self.config.get_params().clone(), builder_height, orchard_anchor);
+        builder.with_progress_notifier(progress_notifier);
 
         let mut change = 0u64;
 
@@ -1640,6 +1767,10 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
 
         println!("{}: Transaction created", now() - start_time);
         println!("Transaction ID: {}", tx.txid());
+        
+        // Debug: Print transaction details for BitcoinZ debugging
+        println!("Transaction version: {:?}", tx.version());
+        // Note: We'll add more debugging after checking transaction structure
 
         {
             self.send_progress.write().await.is_send_in_progress = false;
@@ -1648,6 +1779,62 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
         // Create the TX bytes
         let mut raw_tx = vec![];
         tx.write(&mut raw_tx).unwrap();
+        
+        // Debug: Print raw transaction info for BitcoinZ
+        println!("Raw TX size: {} bytes", raw_tx.len());
+        println!("First 4 bytes (version): {:02x} {:02x} {:02x} {:02x}", 
+                 raw_tx.get(0).unwrap_or(&0),
+                 raw_tx.get(1).unwrap_or(&0), 
+                 raw_tx.get(2).unwrap_or(&0),
+                 raw_tx.get(3).unwrap_or(&0));
+        
+        // BitcoinZ Fix: For transparent-only transactions, analyze the binding signature
+        if is_transparent_only && raw_tx.len() >= 64 {
+            
+            // The binding signature is the last 64 bytes
+            let sig_start = raw_tx.len() - 64;
+            
+            // Print the current binding signature for debugging
+            print!("  ");
+            for i in sig_start..(sig_start + 16).min(raw_tx.len()) {
+                print!("{:02x} ", raw_tx[i]);
+            }
+            println!();
+            
+            // Check if it's all zeros
+            let mut all_zeros = true;
+            for i in sig_start..raw_tx.len() {
+                if raw_tx[i] != 0 {
+                    all_zeros = false;
+                    break;
+                }
+            }
+            
+            if all_zeros {
+            } else {
+            }
+            
+            // Log transaction details
+        }
+        
+        // For BitcoinZ, check if we need to fix the binding signature
+        let has_sapling_spends = s_notes.len() > 0;
+        let has_sapling_outputs = total_z_recepients > 0 || total_o_recepients > 0;
+        
+        if is_transparent_only {
+            // Check if we actually created an Overwinter transaction
+            let tx_version = tx.version();
+            match tx_version {
+                zcash_primitives::transaction::TxVersion::Overwinter => {
+                }
+                zcash_primitives::transaction::TxVersion::Sapling => {
+                }
+                _ => {
+                }
+            }
+        } else if needs_bitcoinz_binding_sig_fix(has_sapling_spends, has_sapling_outputs) {
+            
+        }
 
         let txid = broadcast_fn(raw_tx.clone().into_boxed_slice()).await?;
 
@@ -1686,7 +1873,7 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
 
             // Mark this utxo as unconfirmed spent
             for utxo in utxos {
-                let mut spent_utxo = txs
+                let spent_utxo = txs
                     .current
                     .get_mut(&utxo.txid)
                     .unwrap()

@@ -1,6 +1,7 @@
 use std::cmp;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::any::TypeId;
 
 use crate::compact_formats::compact_tx_streamer_client::CompactTxStreamerClient;
 use crate::compact_formats::{
@@ -23,6 +24,7 @@ use tonic::{
 };
 use zcash_primitives::consensus::{self, BlockHeight, BranchId};
 use zcash_primitives::transaction::{Transaction, TxId};
+use crate::{BitcoinZMainNetwork, BITCOINZ_MAINNET};
 
 #[derive(Clone)]
 pub struct GrpcConnector {

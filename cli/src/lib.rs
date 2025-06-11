@@ -3,10 +3,11 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 
 use log::{error, info};
+use clap::Arg;
 
-use bitcoinzwalletlib::lightclient::lightclient_config::LightClientConfig;
+use bitcoinzwalletlib::lightclient::lightclient_config::{LightClientConfig, DEFAULT_SERVER};
 use bitcoinzwalletlib::{commands, lightclient::LightClient};
-use bitcoinzwalletlib::{MainNetwork, Parameters};
+use bitcoinzwalletlib::{MainNetwork, Parameters, BitcoinZMainNetwork, BITCOINZ_MAINNET};
 
 pub mod version;
 
@@ -43,7 +44,7 @@ macro_rules! configure_clapapp {
                 .value_name("server")
                 .help("Lightwalletd server to connect to.")
                 .takes_value(true)
-                .default_value(lightclient::lightclient_config::DEFAULT_SERVER)
+                .default_value(DEFAULT_SERVER)
                 .takes_value(true))
             .arg(Arg::with_name("data-dir")
                 .long("data-dir")
@@ -85,7 +86,7 @@ pub fn startup(
     print_updates: bool,
 ) -> io::Result<(Sender<(String, Vec<String>)>, Receiver<String>)> {
     // Try to get the configuration
-    let (config, latest_block_height) = LightClientConfig::create(MainNetwork, server.clone(), data_dir)?;
+    let (config, latest_block_height) = LightClientConfig::create(BITCOINZ_MAINNET, server.clone(), data_dir)?;
     
     let lightclient = match seed {
         Some(phrase) => Arc::new(LightClient::new_from_phrase(phrase, &config, birthday, false)?),
@@ -240,14 +241,14 @@ pub fn command_loop<P: Parameters + Send + Sync + 'static>(
 
 pub fn attempt_recover_seed(_password: Option<String>) {
     // Create a Light Client Config in an attempt to recover the file.
-    let _config = LightClientConfig::<MainNetwork> {
+    let _config = LightClientConfig::<BitcoinZMainNetwork> {
         server: "0.0.0.0:0".parse().unwrap(),
         chain_name: "main".to_string(),
-        sapling_activation_height: 0,
+        sapling_activation_height: 328500, // BitcoinZ Sapling activation height
         anchor_offset: 0,
         monitor_mempool: false,
         data_dir: None,
-        params: MainNetwork,
+        params: BITCOINZ_MAINNET,
     };
 
 }
