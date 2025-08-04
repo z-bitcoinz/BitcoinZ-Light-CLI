@@ -59,10 +59,10 @@ impl Parameters for BitcoinZMainNetwork {
         match nu {
             NetworkUpgrade::Overwinter => Some(BlockHeight::from(328500)),
             NetworkUpgrade::Sapling => Some(BlockHeight::from(328500)),
-            NetworkUpgrade::Blossom => Some(BlockHeight::from(653600)),
-            NetworkUpgrade::Heartwood => Some(BlockHeight::from(903800)),
-            NetworkUpgrade::Canopy => Some(BlockHeight::from(1153550)),
-            NetworkUpgrade::Nu5 => None, // BitcoinZ doesn't support Nu5 yet
+            NetworkUpgrade::Blossom => None, // BitcoinZ doesn't have Blossom
+            NetworkUpgrade::Heartwood => None, // BitcoinZ doesn't have Heartwood
+            NetworkUpgrade::Canopy => None, // BitcoinZ doesn't have Canopy
+            NetworkUpgrade::Nu5 => None, // BitcoinZ doesn't have Nu5
             #[cfg(feature = "zfuture")]
             NetworkUpgrade::ZFuture => None,
         }
@@ -73,11 +73,11 @@ impl Parameters for BitcoinZMainNetwork {
     }
 
     fn hrp_sapling_extended_spending_key(&self) -> &str {
-        "secret-extended-key-main"
+        "btcz-secret-extended-key-main"
     }
 
     fn hrp_sapling_extended_full_viewing_key(&self) -> &str {
-        "zxviews"
+        "btczxviews"
     }
 
     fn hrp_sapling_payment_address(&self) -> &str {

@@ -15,14 +15,15 @@ BitcoinZ Light CLI is a privacy-preserving wallet that connects to a lightwallet
 | Transaction Type | Status | Notes |
 |-----------------|---------|-------|
 | Transparent → Transparent (t→t) | ✅ **Working** | Fully functional on mainnet |
-| Transparent → Shielded (t→z) | ✅ **Working** | Shield your transparent funds |
-| Shielded → Shielded (z→z) | 🚧 Testing | Infrastructure complete |
-| Shielded → Transparent (z→t) | 🚧 Testing | Infrastructure complete |
+| Transparent → Shielded (t→z) | ✅ **Working** | Shield funds with memo support |
+| Shielded → Shielded (z→z) | ✅ **Working** | Private z-to-z transfers with memos |
+| Shielded → Transparent (z→t) | ✅ **Working** | Unshield funds to transparent addresses |
 
 ## Features
 
 - **Fast sync** - Uses lightwalletd protocol for efficient blockchain synchronization
 - **Full privacy** - Supports shielded (z-addresses) and transparent addresses
+- **Memo support** - Send encrypted messages with shielded transactions
 - **HD wallet** - Hierarchical deterministic wallet with seed phrase backup
 - **Multi-platform** - Works on Windows, macOS, and Linux
 - **Secure** - Private keys never leave your device
@@ -32,8 +33,10 @@ BitcoinZ Light CLI is a privacy-preserving wallet that connects to a lightwallet
 ### Build from Source
 
 Requirements:
-- Rust 1.70 or later
+- Rust 1.70 or later (stable channel recommended)
 - Cargo
+- CMake (for building dependencies)
+- Protobuf compiler (protoc)
 
 ```bash
 git clone https://github.com/your-repo/btcz-light-cli
@@ -51,7 +54,7 @@ Coming soon - pre-built binaries for major platforms.
 
 ### Basic Usage
 
-Start the wallet (connects to default server at 93.107.37.216:9067):
+Start the wallet (connects to default server at https://lightd.btcz.rocks:9067):
 ```bash
 ./target/release/bitcoinz-light-cli
 ```
@@ -73,8 +76,11 @@ Once the wallet is running, you can use these commands:
 - `quit` - Exit the wallet
 
 #### Transaction Commands
-- `send <address> <amount_in_zatoshis>` - Send transparent transaction
-- `shield <from_taddr> <to_zaddr> <amount> <fee>` - Shield transparent funds
+- `send <address> <amount_in_zatoshis> "optional_memo"` - Send transaction with optional memo
+- `new z` - Generate new z-address
+- `new t` - Generate new t-address
+- `encryptmessage <z_address> "message"` - Encrypt message for z-address
+- `decryptmessage <encrypted_base64>` - Decrypt received message
 - `list` - Show transaction history
 
 #### Example Commands
@@ -85,11 +91,14 @@ balance
 # Get your addresses
 addresses
 
-# Send transparent transaction (amount in zatoshis, 1 BTCZ = 100,000,000 zatoshis)
+# Send transaction (amount in zatoshis, 1 BTCZ = 100,000,000 zatoshis)
 send t1bzjjWe5gD28AcCW36FVV3t76XnzdAyguw 100000000
 
-# Shield funds (amounts in BTCZ)
-shield t1dWCXCaMn2tJqUuzxTPRNXfmaLQQVnYPcN zs1k3wanq50ae50lgujv9jkh0p2lq5wn99u8l0j5d4q8tmssv9krrpzcry4xs3jtsceg38qz9ctpnn 1.5 0.001
+# Send with memo to z-address
+send zs1k3wanq50ae50lgujv9jkh0p2lq5wn99u8l0j5d4q8tmssv9krrpzcry4xs3jtsceg38qz9ctpnn 50000000 "Hello from BitcoinZ!"
+
+# Encrypt message for z-address
+encryptmessage zs1k3wanq50ae50lgujv9jkh0p2lq5wn99u8l0j5d4q8tmssv9krrpzcry4xs3jtsceg38qz9ctpnn "Private message"
 
 # View transaction history
 list

@@ -1429,15 +1429,7 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
 
         let (progress_notifier, progress_notifier_rx) = mpsc::channel();
 
-        let orchard_anchor = Anchor::from(
-            self.orchard_witnesses
-                .read()
-                .await
-                .as_ref()
-                .unwrap()
-                .root(self.config.anchor_offset as usize)
-                .unwrap(),
-        );
+        // BitcoinZ doesn't use Orchard, so no orchard_anchor needed
 
         
         // For BitcoinZ, we need special handling for transparent-only transactions
@@ -1485,12 +1477,10 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
         
         let is_transparent_only = tx_type == BitcoinZTxType::TransparentToTransparent;
         
-        // BitcoinZ Fix: Handle shielded transactions differently than transparent-only
+        // BitcoinZ Fix: Use same approach as BitcoinZ Blue - always use standard builder
         if tx_type != BitcoinZTxType::TransparentToTransparent {
             println!("BitcoinZ: Detected shielded transaction type: {:?}", tx_type);
-            println!("BitcoinZ: Shielded transactions temporarily using standard builder");
-            // TODO: Integrate bitcoinz_shielded_simplified module here
-            // For now, fall through to standard builder which will fail with binding signature error
+            println!("BitcoinZ: Using standard zcash_primitives Builder (same as BitcoinZ Blue)");
         }
         
         // BitcoinZ Fix: For transparent-only transactions, use JavaScript bridge
@@ -1592,7 +1582,8 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
             }
         }
         
-        // BitcoinZ Fix: For shielded transactions, use our custom builder
+        // BitcoinZ Fix: DISABLED custom builder - use standard Builder for all transactions (same as BitcoinZ Blue)
+        /*
         if tx_type != BitcoinZTxType::TransparentToTransparent {
             println!("BitcoinZ: Shielded transaction detected - type: {:?}", tx_type);
             println!("BitcoinZ: Using custom shielded transaction builder");
@@ -1751,10 +1742,11 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
                 }
             }
         }
+        */
         
-        // Standard builder for non-transparent or if Overwinter builder failed
+        // Standard builder - use same approach as BitcoinZ Blue (no Orchard support)
         let builder_height = target_height;
-        let mut builder = Builder::new_with_orchard(self.config.get_params().clone(), builder_height, orchard_anchor);
+        let mut builder = Builder::new(self.config.get_params().clone(), builder_height);
         builder.with_progress_notifier(progress_notifier);
 
         let mut change = 0u64;
@@ -1787,15 +1779,9 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("{:?}", e))?;
 
-        // Add Orchard notes
-        for selected in o_notes.iter() {
-            if let Err(e) = builder.add_orchard_spend(selected.sk, selected.note, selected.merkle_path.clone()) {
-                let e = format!("Error adding orchard note: {:?}", e);
-                error!("{}", e);
-                return Err(e);
-            } else {
-                change += selected.note.value().inner();
-            }
+        // Skip Orchard notes for BitcoinZ (same as BitcoinZ Blue)
+        if o_notes.len() > 0 {
+            warn!("Skipping {} Orchard notes as BitcoinZ doesn't support Orchard", o_notes.len());
         }
 
         // Add Sapling notes
@@ -1814,16 +1800,9 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
             }
         }
 
-        // Make sure we have at least 1 orchard address
-        if self.keys.read().await.okeys.len() == 0 {
-            self.keys().write().await.add_oaddr();
-        }
-
-        // We'll use the first ovk to encrypt outgoing Txns
+        // We'll use the first ovk to encrypt outgoing Txns (same as BitcoinZ Blue)
         let s_ovk = self.keys.read().await.zkeys[0].extfvk.fvk.ovk;
-        let o_ovk = self.keys.read().await.okeys[0]
-            .fvk()
-            .to_ovk(orchard::keys::Scope::External);
+        // BitcoinZ doesn't use Orchard OVK
 
         let mut total_z_recepients = 0u32;
         let mut total_o_recepients = 0u32;
@@ -1848,12 +1827,17 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
 
             if let Err(e) = match to {
                 address::RecipientAddress::Unified(to) => {
-                    // TODO(orchard): Allow using the sapling or transparent parts of this unified address too.
-                    let orchard_address = to.orchard().unwrap().clone();
-                    total_o_recepients += 1;
-                    change -= u64::from(value);
-
-                    builder.add_orchard_output(Some(o_ovk.clone()), orchard_address, value.into(), encoded_memo)
+                    // BitcoinZ doesn't support Orchard, so use Sapling component if available (same as BitcoinZ Blue)
+                    if let Some(sapling_addr) = to.sapling() {
+                        total_z_recepients += 1;
+                        change -= u64::from(value);
+                        builder.add_sapling_output(Some(s_ovk), sapling_addr.clone(), value, encoded_memo)
+                    } else if let Some(t_addr) = to.transparent() {
+                        change -= u64::from(value);
+                        builder.add_transparent_output(&t_addr, value)
+                    } else {
+                        return Err("Unified address has no supported receivers for BitcoinZ".to_string());
+                    }
                 }
                 address::RecipientAddress::Shielded(to) => {
                     total_z_recepients += 1;
@@ -1872,29 +1856,14 @@ impl<P: consensus::Parameters + Send + Sync + 'static> LightWallet<P> {
         }
 
         // Change
-        // If we're sending only to orchard addresses (or orchard + transparent addresses) send the change to
-        // our orchard address.
+        // BitcoinZ doesn't support Orchard, so always send change to Sapling (same as BitcoinZ Blue)
         change -= u64::from(DEFAULT_FEE);
         if change > 0 {
-            // Send the change to orchard if there are no sapling outputs and at least one orchard note
-            // was selected. This means for t->t transactions, change will go to sapling.
-            if s_out == 0 && o_notes.len() > 0 {
-                let wallet_o_address = self.keys.read().await.okeys[0].orchard_address();
-
-                builder
-                    .add_orchard_output(Some(o_ovk.clone()), wallet_o_address, change, MemoBytes::empty())
-                    .map_err(|e| {
-                        let e = format!("Error adding orchard change: {:?}", e);
-                        error!("{}", e);
-                        e
-                    })?;
-            } else {
-                // Send to sapling address
-                builder.send_change_to(
-                    self.keys.read().await.zkeys[0].extfvk.fvk.ovk,
-                    self.keys.read().await.zkeys[0].zaddress.clone(),
-                );
-            }
+            // Always send to sapling address for BitcoinZ
+            builder.send_change_to(
+                self.keys.read().await.zkeys[0].extfvk.fvk.ovk,
+                self.keys.read().await.zkeys[0].zaddress.clone(),
+            );
         }
 
         // Set up a channel to recieve updates on the progress of building the transaction.
