@@ -39,8 +39,8 @@ Requirements:
 - Protobuf compiler (protoc)
 
 ```bash
-git clone https://github.com/your-repo/btcz-light-cli
-cd btcz-light-cli
+git clone https://github.com/z-bitcoinz/BitcoinZ-Light-CLI
+cd BitcoinZ-Light-CLI
 cargo build --release
 ```
 
@@ -114,14 +114,13 @@ The birthday is the block height when your wallet was created. Use 0 to scan fro
 
 ## Technical Implementation
 
-This wallet implements significant BitcoinZ-specific modifications:
+This wallet is built specifically for the BitcoinZ network with:
 
-### Key Technical Achievements
-1. **Edwards Point Serialization** - Custom implementation for BitcoinZ's bellman 0.1.0 format
-2. **Binding Signature Algorithm** - BitcoinZ uses `sign(bsk, bvk || sighash)` vs Zcash's `sign(bsk, sighash)`
-3. **Transaction Builders** - Custom builders to handle BitcoinZ's unique requirements
-
-See [TECHNICAL_DETAILS.md](TECHNICAL_DETAILS.md) for in-depth technical information.
+### Key Features
+1. **BitcoinZ Network Parameters** - Correct HRP parameters and activation heights
+2. **Shielded Transaction Support** - Full z-address functionality with memo encryption
+3. **Standard zcash_primitives Builder** - Compatible with BitcoinZ network specifications
+4. **Optimized Codebase** - Clean, efficient implementation focused on BitcoinZ
 
 ## Configuration
 
@@ -140,19 +139,6 @@ Files:
 - **Private keys stay local** - Your keys never leave your device
 - **Server privacy** - The lightwalletd server cannot see your private keys or shielded transaction details
 
-## Development Journey
-
-This implementation required solving several challenging technical problems due to BitcoinZ's protocol differences from Zcash. The most significant challenges were:
-
-1. Discovering BitcoinZ's unique edwards point serialization format
-2. Implementing the custom binding signature algorithm
-3. Working around zcash_primitives API limitations
-
-See [CHALLENGES_AND_SOLUTIONS.md](CHALLENGES_AND_SOLUTIONS.md) for the full development story.
-
-## Building and Testing
-
-See [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md) for detailed build instructions and [TESTING_RESULTS.md](TESTING_RESULTS.md) for test results.
 
 ## License
 
