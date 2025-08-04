@@ -158,11 +158,8 @@ See [BUILD_INSTRUCTIONS.md](BUILD_INSTRUCTIONS.md) for detailed build instructio
 
 MIT License - see [LICENSE](LICENSE) file for details
 
-## Credits
-
-Based on Zecwallet Light CLI by Aditya Kulkarni, extensively modified for BitcoinZ protocol compatibility.
 
 ## Support
 
-- GitHub Issues: [Create an issue](https://github.com/your-repo/btcz-light-cli/issues)
+- GitHub Issues: [Create an issue](https://github.com/z-bitcoinz/BitcoinZ-Light-CLI/issues)
 - BitcoinZ Community: [bitcoinz.global](https://bitcoinz.global)
